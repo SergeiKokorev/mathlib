@@ -36,35 +36,33 @@ class BaseBezier:
     -------
     get_polynomial_coefficients() -> list
         Returns the polynomial coefficients of the Bezier curve
-        list[a0, a1, a2, ..., an], where a0 is a free term, a coefficient at x**n
+        list[a0, a1, a2, ..., an], where a0 is a free term, an coefficient at x**n
     get_point(t: float=0.0) -> list
-        Returns point at t. list [x, y, z]
+        Returns point at t. list of Cartesian coordinates
     get_points(t: list) -> list
-        Returns a list of points at ts. list[[x0, y0, z0], [x1, y1, z1], ...]
+        Returns a list of points at ts. list[list of Cartesian coordinates]
     get_length(n: int=5, t1: float=0.0, t2: float=1.0) -> float
         Returns a length of Bezier curve between points t1 and t2, 
-        computed by using Gaussian Quadrature, n is number of points 
+        computed by using Gaussian Quadrature, n is a n-point of Gausian Quadrature 
         used for computing length
     get_coordinates(npoints: int=0, start: float=0.0, stop: float=1.0) -> list
         Returns Cartesian coordinates of points lying between start and stop
         npoints is number of points
-    get_t(point: tuple([0, 0.0]), start: float=0.0, stop=1.0, eps: float=10**-3) -> float
-        Returns Bezier curve parameter t at point point. Where point is a tuple.
-        point[0] is a number of coordinate (ex. point[0]=0 is first coordinate X)
-        point[1] this is a coordinate itselfin which t will be computed
+    get_t(point: list, start: float=0.0, stop=1.0, eps: float=10**-3) -> float
+        Returns Bezier curve parameter t at point. Where point is a list of coordinates.
         start and stop are the interval over which the t will be computed
-        eps is a computation accurance
-    def tangetn(t: float=0.0) -> list
+        eps is a computation accuracy
+    tangetn(t: float=0.0) -> list
         Returns normalized tangent vector to the curve at the point t
     get_length_point(length: float=0.0, t1: float=0.0, t2: float=1.0)
         Returns point at particular Bezier length
         length is the length at this point will be computed
         t1 and t2 are the interval of computation
-    def de_casteljau(t: float = 0.5) -> List[BaseBeizer]
+    de_casteljau(t: float = 0.5) -> List[BaseBeizer]
         Split Bezier at point t and returns two new BaseBezier curve
         t is a parameter of Bezier,
         return List[BaseBezier]
-    def __de_casteljau(t: float = 0.5) -> Tuple[List]
+    __de_casteljau(t: float = 0.5) -> Tuple[List]
         split curve and return tuple of new control points of two curves
         return tuple(b1, b2)
     """
@@ -143,7 +141,7 @@ class BaseBezier:
         points = []
         t = linspace(start, stop, npoints)
         for ti in t:
-            points.append(self.__de_casteljau(ti)[0])
+            points.append(self.__de_casteljau(ti)[0][-1])
         
         return points
 
@@ -153,14 +151,14 @@ class BaseBezier:
         it = it
 
         left, right = self.get_point(t0), self.get_point(t1)
-        t = linspace(t0, t1, 500)
-        mid = self.get_point(t[int(len(t) / 2)])
+        t = linspace(t0, t1, 3)
+        mid = self.get_point(t[1])
 
         error = sum([(mi - pi) ** 2 for mi, pi in zip(mid, point)]) ** 0.5
         lerror = sum([(mi - pi) ** 2 for mi, pi in zip(left, point)]) ** 0.5
         rerror = sum([(mi - pi) ** 2 for mi, pi in zip(right, point)]) ** 0.5
 
-        if error <= eps : return t[int(len(t) / 2)]
+        if error <= eps : return t[1]
         if lerror <= eps : return t0
         if rerror <= eps : return t1
         if it >= max_it : return False
@@ -226,6 +224,20 @@ class BaseBezier:
         magnitude = sum([p ** 2 for p in tan]) ** 0.5
         return [p / magnitude for p in tan]
 
+    def derivative(self, t: float=0.0) -> list:
+        n = self.degree
+        if n <= 1:
+            return 0.0
+        else:
+            point = [(1 - t) ** (n - 1) * (p2 - p1) for p1, p2 in zip(self.points[0], self.points[1])]
+
+        for i in range(1, n):
+            for d in range(self.dimention):
+                point[d] += self._Bernstein_polynomial(n=(n - 1), i=i, t=t) * \
+                    (self.points[i+1][d] - self.points[i][d])
+        
+        return [n * p for p in point]
+
     def __de_casteljau(self, t: float = 0.5) -> Tuple[List]:
 
         beta = [[c for c in self.points]]
@@ -262,26 +274,11 @@ class BezierThroughPoints(BaseBezier):
     lengths: List of all pieces length: list
     A and B: A equation coefficient matrices to compute Bezier curve control points: list
     num_curves: Number of pieces of curve
+    control_points: list of control potins each of Bezier curves
 
     Methods
     -------
-    interpolate(points: tuple([0, list])) -> list
-        Return interpolated coordinates of the Bezier curve
-        points is a tuple. points[0] a coordinate index
-        points[1] is a list of coordinates
-    norm_length_point(norm_length: float=0.0) -> list
-        Returns a coordinate of point at normed length = norm_length
-        [x, y, z]
-    get_coordinates(npoints: int=0) -> list
-        Returns coordinates of points. npoints is a number of points,
-        if is None then the self.num_points(default=50) is taken
-        [[x0, y0, z0], [x1, y1, z1], ...]
-    derivative(norm_length: float=0.0) -> list
-        Returns a derivative of the Bezier curve at the point 
-        corresponding the normalized length=norm_length
-    derivatives(norm_length: list=[0.0, 1.0]) -> list
-        Returns derivatives at the points corresponding the normalized
-        lengths in the list norm_length
+    evaluate() Merge all Bezier curve and return Basebezier curve degree n
     """
 
     def __init__(self, points: list, *args, **kwargs):
@@ -289,8 +286,10 @@ class BezierThroughPoints(BaseBezier):
         self.curves: List[BaseBezier] = []
         self.__degree = kwargs.get('degree', 3)
         self.__dim = 2 + (len(self.points) - 2) * 2
-        self.__A = [[0] * self.__dim for d in range(self.__dim)]
-        self.__B = [[0] * self.dimention for d in range(self.__dim)]
+        self.__A = self.__computeA()
+        self.__B = self.__computeB()
+        self.__iA = inverse(self.__A)
+
         self.__number_of_curves = len(self.points) - 1
         for points in self.__control_points():
             self.curves.append(BaseBezier(points=points))
@@ -300,6 +299,27 @@ class BezierThroughPoints(BaseBezier):
         self.__curve_lengths = [curve.get_length() for curve in self.curves]
         self.__length = sum(self.__curve_lengths)
         self._control_points = self.__control_points()
+
+    def __computeA(self):
+        res = [[0] * self.__dim for d in range(self.__dim)]
+        res[0][:2] = [2, -1]
+        res[self.__dim - 1][self.__dim - 2:] = [-1, 2]
+        j = 0
+        for i in range(self.__dim):
+            if j < self.__dim - 2:
+                res[i + 1][j + 1 : j + 3] = [1, 1]
+                res[i + int(self.__dim / 2)][j : j + 4] = [1, -2, 2, -1]
+            j += 2
+        return res
+
+    def __computeB(self):
+        res = [[0] * self.dimention for d in range(self.__dim)]
+        res[0] = self.points[0]
+        res[self.__dim - 1] = self.points[len(self.points) - 1]
+        res[1:len(self.points) - 1] = [
+            [2 * p[i] for i in range(self.dimention)] for p in self.points[1:len(self.points) - 1]
+            ]
+        return res
 
     @property
     def first_point(self):
@@ -319,28 +339,10 @@ class BezierThroughPoints(BaseBezier):
 
     @property
     def A(self) -> list:
-
-        self.__A[0][:2] = [2, -1]
-        self.__A[self.__dim - 1][self.__dim - 2:] = [-1, 2]
-
-        j = 0
-        for i in range(self.__dim):
-            if j < self.__dim - 2:
-                self.__A[i + 1][j + 1 : j + 3] = [1, 1]
-                self.__A[i + int(self.__dim / 2)][j : j + 4] = [1, -2, 2, -1]
-            j += 2
-
         return self.__A
 
     @property
     def B(self) -> list:
-
-        self.__B[0] = self.points[0]
-        self.__B[self.__dim - 1] = self.points[len(self.points) - 1]
-        self.__B[1:len(self.points) - 1] = [
-            [2 * p[i] for i in range(self.dimention)] for p in self.points[1:len(self.points) - 1]
-            ]
-
         return self.__B
 
     @property
@@ -355,31 +357,27 @@ class BezierThroughPoints(BaseBezier):
     def control_points(self):
         return self._control_points
 
-    def get_point(self, t: float) -> list:
+    def evaluate(self) -> BaseBezier:
+        pass
 
+    def get_point(self, t: float) -> list:
         pass
 
     def get_coordinates(self, npoints: int = 10) -> list:
-
         pass
 
     def derivative(self, t: float = 0.5) -> list:
-        
         pass
 
-    def derivatives(self, t: list = [0.0, 1.0]) -> list:
-        
+    def derivative(self, t: list = [0.0, 1.0]) -> list:
         pass
 
     def tangent_line(self, t: float = 0.5):
-
         pass
 
     def __control_points(self) -> list:
 
-        print('Compute control points')
-
-        cp = matmul(inverse(self.A), self.B)
+        cp = matmul(self.__iA, self.__B)
         control_points = []
 
         for i in range(self.num_curves):
