@@ -278,7 +278,8 @@ class BezierThroughPoints(BaseBezier):
 
     Methods
     -------
-    evaluate() Merge all Bezier curve and return Basebezier curve degree n
+    merge(self, k: int = 2) Merge all Bezier curve and return Basebezier curve degree n
+        k - geometrical continuity
     """
 
     def __init__(self, points: list, *args, **kwargs):
@@ -357,7 +358,7 @@ class BezierThroughPoints(BaseBezier):
     def control_points(self):
         return self._control_points
 
-    def evaluate(self) -> BaseBezier:
+    def merge(self, k: int = 2) -> BaseBezier:
         pass
 
     def get_point(self, t: float) -> list:
